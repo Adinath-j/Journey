@@ -1,1 +1,1 @@
-/// <reference types="vite/client" />
+// Deleted during JS migration

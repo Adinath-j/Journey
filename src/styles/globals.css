@@ -14,7 +14,7 @@
 }
 
 * { box-sizing: border-box; }
-html { min-width: 1200px; background: #020612; }
+html { min-width: 1200px; background: #020612; scrollbar-gutter: stable; overflow-y: scroll; }
 body { margin: 0; min-width: 1200px; min-height: 100vh; overflow-x: auto; }
 button { font: inherit; }
 button, [role="button"] { -webkit-tap-highlight-color: transparent; }

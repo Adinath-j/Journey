@@ -7,7 +7,6 @@ import {
   GitCommitHorizontal,
   Trophy,
 } from "lucide-react";
-import type { FocusItem, Metric, MissionItem, QuickStat } from "@/types/dashboard";
 
 export const dashboardOverview = {
   userName: "Adinath",
@@ -17,25 +16,25 @@ export const dashboardOverview = {
   estimatedTime: "4h 0m",
 };
 
-export const metrics: Metric[] = [
+export const metrics = [
   { id: "progress", label: "Overall Progress", value: "46%", suffix: "", accent: "violet", icon: BarChart3, progress: 46, message: "Keep going!" },
   { id: "streak", label: "Study Streak", value: "17", suffix: "days", accent: "orange", icon: Flame },
   { id: "hours", label: "Hours This Week", value: "28.5", suffix: "hours", accent: "blue", icon: Clock3 },
   { id: "projects", label: "Projects Completed", value: "4", suffix: "projects", accent: "mint", icon: CheckCircle2 },
 ];
 
-export const focusItems: FocusItem[] = [
+export const focusItems = [
   { label: "Software Engineering", progress: 60, accent: "blue" },
   { label: "Generative AI", progress: 35, accent: "mint" },
 ];
 
-export const missionItems: MissionItem[] = [
+export const missionItems = [
   { id: "trees", label: "Solve 3 Tree problems", duration: "1.5h", completed: true },
   { id: "jwt", label: "Complete JWT Authentication", duration: "2.0h", completed: true },
   { id: "rag", label: "Read 30 min about RAG", duration: "0.5h", completed: false },
 ];
 
-export const quickStats: QuickStat[] = [
+export const quickStats = [
   { label: "DSA Problems Solved", value: "72 / 300", icon: Code2, accent: "text-sky-400" },
   { label: "LeetCode Contests", value: "2", icon: Trophy, accent: "text-amber-300" },
   { label: "GitHub Commits", value: "48", icon: GitCommitHorizontal, accent: "text-slate-300" },
