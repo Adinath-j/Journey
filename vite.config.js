@@ -2,11 +2,14 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
+const isTauri = process.env.TAURI_DEV === "true";
+
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   clearScreen: false,
   server: {
-    port: 1420,
+    port: isTauri ? 1420 : 5173,
     strictPort: true,
   },
   envPrefix: ["VITE_", "TAURI_ENV_*"],

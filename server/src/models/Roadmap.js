@@ -26,6 +26,27 @@ const roadmapSchema = new mongoose.Schema(
       enum: ["upcoming", "active", "complete"],
       default: "upcoming",
     },
+    order: {
+      type: Number,
+      default: 0,
+    },
+    dependencies: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Roadmap",
+      }
+    ],
+    importance: {
+      type: Number,
+      min: 1,
+      max: 10,
+      default: 5,
+    },
+    frequency: {
+      type: String,
+      enum: ["daily", "weekly", "monthly", "none"],
+      default: "none",
+    },
     estimatedHours: {
       type: Number,
       default: 0,
@@ -41,6 +62,18 @@ const roadmapSchema = new mongoose.Schema(
         type: { type: String, enum: ["video", "article", "course", "book", "other"] },
       },
     ],
+    concepts: [
+      {
+        title: String,
+        completed: { type: Boolean, default: false }
+      }
+    ],
+    problems: [
+      {
+        title: String,
+        completed: { type: Boolean, default: false }
+      }
+    ]
   },
   { timestamps: true }
 );

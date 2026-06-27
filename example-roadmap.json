@@ -1,0 +1,79 @@
+[
+  {
+    "title": "React Mastery",
+    "description": "Deep dive into React, from hooks to architecture.",
+    "status": "active",
+    "estimatedHours": 120,
+    "importance": 10,
+    "frequency": "daily",
+    "children": [
+      {
+        "title": "Core Hooks",
+        "description": "Understanding state, side effects, and refs.",
+        "status": "complete",
+        "estimatedHours": 15,
+        "importance": 9,
+        "frequency": "weekly",
+        "concepts": [
+          { "title": "useState batching", "completed": true },
+          { "title": "useEffect dependencies", "completed": true },
+          { "title": "useRef for mutable state", "completed": true }
+        ],
+        "problems": [
+          { "title": "Build a custom useCounter hook", "completed": true },
+          { "title": "Fix infinite loop in useEffect", "completed": true }
+        ],
+        "resources": [
+          { "title": "React Docs - Hooks", "url": "https://react.dev/reference/react", "type": "article" }
+        ]
+      },
+      {
+        "title": "State Management",
+        "description": "Handling global state in large applications.",
+        "status": "active",
+        "estimatedHours": 25,
+        "importance": 8,
+        "frequency": "weekly",
+        "children": [
+          {
+            "title": "Context API",
+            "status": "complete",
+            "estimatedHours": 5,
+            "concepts": [
+              { "title": "Prop Drilling", "completed": true },
+              { "title": "Providers and Consumers", "completed": true }
+            ]
+          },
+          {
+            "title": "Zustand",
+            "status": "active",
+            "estimatedHours": 10,
+            "concepts": [
+              { "title": "Creating a store", "completed": false },
+              { "title": "Persist middleware", "completed": false }
+            ],
+            "resources": [
+              { "title": "Zustand GitHub", "url": "https://github.com/pmndrs/zustand", "type": "other" }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Performance Optimization",
+        "description": "Preventing unnecessary re-renders.",
+        "status": "upcoming",
+        "estimatedHours": 20,
+        "importance": 7,
+        "frequency": "none",
+        "concepts": [
+          { "title": "React.memo", "completed": false },
+          { "title": "useMemo vs useCallback", "completed": false },
+          { "title": "Virtualization", "completed": false }
+        ],
+        "resources": [
+          { "title": "When to use useMemo", "url": "https://youtube.com/watch?v=12345", "type": "video" }
+        ]
+      }
+    ]
+  }
+]

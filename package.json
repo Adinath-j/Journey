@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --configLoader runner",
+    "dev": "vite --port 5173 --configLoader runner",
+    "dev:tauri": "vite --port 1421 --configLoader runner",
     "build": "vite build --configLoader runner",
     "preview": "vite preview --configLoader runner",
     "tauri": "tauri"
@@ -12,10 +13,12 @@
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
     "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
     "lucide-react": "^0.468.0",
     "motion": "^12.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "sonner": "^1.7.4",
     "tailwind-merge": "^3.0.0",
     "zustand": "^5.0.0"
   },

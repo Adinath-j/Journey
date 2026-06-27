@@ -4,15 +4,18 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { SectionTitle } from "@/components/common/SectionTitle";
 import { cn } from "@/lib/cn";
 import { useDashboardStore } from "@/store/useDashboardStore";
+import { useLogStore } from "@/store/useLogStore";
+import { toast } from "sonner";
 
 const heatmapDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export function HeatmapPreview() {
   const heatmapData = useDashboardStore((state) => state.heatmap) || [];
+  const logs = useLogStore((state) => state.logs) || [];
 
   const { heatmapValues, heatmapMonths } = useMemo(() => {
-    // Generate a 7x15 matrix (rows: days, cols: weeks) initialized to 0
-    const matrix = Array.from({ length: 7 }, () => Array.from({ length: 15 }, () => 0));
+    // Generate a 7x15 matrix (rows: days, cols: weeks) initialized to null
+    const matrix = Array.from({ length: 7 }, () => Array.from({ length: 15 }, () => null));
     
     // Create a map of date strings to intensities
     const dataMap = new Map(heatmapData.map(h => [h.date, h.intensity]));
@@ -33,7 +36,11 @@ export function HeatmapPreview() {
       d.setDate(today.getDate() - i);
       const dateStr = d.toISOString().split("T")[0];
       
-      matrix[row][col] = dataMap.get(dateStr) || 0;
+      matrix[row][col] = {
+        intensity: dataMap.get(dateStr) || 0,
+        dateStr: dateStr,
+        dayOfMonth: d.getDate(),
+      };
 
       // Track months for headers (simple approximation)
       if (row === 0) {
@@ -54,6 +61,26 @@ export function HeatmapPreview() {
     return { heatmapValues: matrix, heatmapMonths: months };
   }, [heatmapData]);
 
+  const handleCellClick = (cell) => {
+    if (!cell || cell.intensity === 0) return;
+    
+    // Find logs for this specific date
+    const dayLogs = logs.filter(log => {
+      const logDate = new Date(log.date).toISOString().split("T")[0];
+      return logDate === cell.dateStr;
+    });
+
+    if (dayLogs.length > 0) {
+      const titles = dayLogs.map(l => l.title).join(", ");
+      toast(`Activity on the ${cell.dayOfMonth}th`, {
+        description: titles,
+        icon: "🗓️"
+      });
+    } else {
+      toast(`You had ${cell.intensity} activities on the ${cell.dayOfMonth}th`);
+    }
+  };
+
   return (
     <GlassCard className="p-5">
       <SectionTitle icon={CalendarDays}>Study Heatmap</SectionTitle>
@@ -66,9 +93,17 @@ export function HeatmapPreview() {
             {heatmapMonths.map((month, i) => <span key={i} className="text-[11px] text-slate-300" style={{ gridColumn: `${Math.max(1, month.start + 1)} / span ${month.span}` }}>{month.label}</span>)}
           </div>
           <div className="grid grid-flow-col grid-cols-15 grid-rows-7 gap-[4px]">
-            {Array.from({ length: 15 }, (_, column) => heatmapValues.map((row) => row[column])).flat().map((value, index) => (
-              <span key={index} className={cn("aspect-square min-h-[12px] rounded-[3px]", `heat-${value}`)} title={`${value} activity level`} />
-            ))}
+            {Array.from({ length: 15 }, (_, column) => heatmapValues.map((row) => row[column])).flat().map((cell, index) => {
+              if (!cell) return <span key={index} className="aspect-square min-h-[12px] rounded-[3px] bg-transparent" />;
+              return (
+                <span 
+                  key={index} 
+                  onClick={() => handleCellClick(cell)}
+                  className={cn("aspect-square min-h-[12px] rounded-[3px] cursor-pointer hover:ring-1 hover:ring-white/30 transition-all", `heat-${cell.intensity}`)} 
+                  title={String(cell.dayOfMonth)} 
+                />
+              );
+            })}
           </div>
         </div>
       </div>

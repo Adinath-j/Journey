@@ -1,5 +1,6 @@
 import { StudyLog } from "../models/StudyLog.js";
 import { Roadmap } from "../models/Roadmap.js";
+import mongoose from "mongoose";
 
 // @desc    Get dashboard aggregated stats
 // @route   GET /api/dashboard
@@ -8,157 +9,285 @@ export const getDashboardStats = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    // 1. Roadmap Progress
-    const totalNodes = await Roadmap.countDocuments({ user: userId });
-    const completedNodes = await Roadmap.countDocuments({ user: userId, status: "complete" });
-    const overallProgress = totalNodes === 0 ? 0 : Math.round((completedNodes / totalNodes) * 100);
-
-    // 2. Study Streak Calculation
-    // Find unique dates of study logs
-    const logs = await StudyLog.find({ user: userId }).select("date").sort({ date: -1 });
-    let streak = 0;
-    
-    if (logs.length > 0) {
-      const uniqueDates = [...new Set(logs.map(log => log.date.toISOString().split("T")[0]))];
-      
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      
-      const todayStr = today.toISOString().split("T")[0];
-      const yesterdayStr = yesterday.toISOString().split("T")[0];
-
-      let currentDateStr = uniqueDates[0];
-      let dateIndex = 0;
-
-      if (currentDateStr === todayStr || currentDateStr === yesterdayStr) {
-        streak = 1;
-        let checkDate = new Date(currentDateStr);
-        
-        while (dateIndex < uniqueDates.length - 1) {
-          checkDate.setDate(checkDate.getDate() - 1);
-          const previousStr = checkDate.toISOString().split("T")[0];
-          
-          if (uniqueDates[dateIndex + 1] === previousStr) {
-            streak++;
-            dateIndex++;
-          } else {
-            break;
+    // We use Promise.all to run these highly optimized MongoDB pipelines in parallel
+    const [
+      heroResult,
+      weeklyLogsResult,
+      weeklyTopicsResult,
+      todaysPlanResult,
+      heatmapResult,
+      recentActivityResult
+    ] = await Promise.all([
+      // 1. Hero & Breadcrumbs Pipeline
+      Roadmap.aggregate([
+        { $match: { user: userId, status: "active" } },
+        { $limit: 1 },
+        {
+          $graphLookup: {
+            from: "roadmaps",
+            startWith: "$parentId",
+            connectFromField: "parentId",
+            connectToField: "_id",
+            as: "ancestors",
+            depthField: "depth"
+          }
+        },
+        {
+          $lookup: {
+            from: "roadmaps",
+            localField: "_id",
+            foreignField: "parentId",
+            as: "children"
+          }
+        },
+        {
+          $lookup: {
+            from: "studylogs",
+            let: { topicId: "$_id" },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$topicId", "$$topicId"] } } },
+              { $sort: { date: -1 } },
+              { $limit: 1 }
+            ],
+            as: "latestLog"
           }
         }
-      }
+      ]),
+
+      // 2. Weekly Progress Pipeline
+      StudyLog.aggregate([
+        { $match: { user: userId, date: { $gte: new Date(new Date().setDate(new Date().getDate() - 7)) } } },
+        { $group: { _id: null, totalMinutes: { $sum: "$durationMinutes" } } }
+      ]),
+
+      Roadmap.aggregate([
+        { $match: { user: userId, status: "complete", updatedAt: { $gte: new Date(new Date().setDate(new Date().getDate() - 7)) } } },
+        { $count: "count" }
+      ]),
+
+      // 3. Today's Plan: Intelligent Scoring Engine Pipeline
+      Roadmap.aggregate([
+        { $match: { user: userId, status: { $ne: "complete" } } },
+        // Lookup incomplete dependencies
+        {
+          $lookup: {
+            from: "roadmaps",
+            localField: "dependencies",
+            foreignField: "_id",
+            pipeline: [ { $match: { status: { $ne: "complete" } } } ],
+            as: "incompleteDeps"
+          }
+        },
+        // Only keep nodes with NO incomplete dependencies
+        { $match: { incompleteDeps: { $size: 0 } } },
+        // Lookup latest study log for this node
+        {
+          $lookup: {
+            from: "studylogs",
+            let: { topicId: "$_id" },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$topicId", "$$topicId"] } } },
+              { $sort: { date: -1 } },
+              { $limit: 1 }
+            ],
+            as: "latestLog"
+          }
+        },
+        // Calculate scoring fields natively in Mongo
+        {
+          $addFields: {
+            baseScore: { $ifNull: ["$importance", 5] },
+            freqBonus: {
+              $cond: { if: { $eq: ["$frequency", "daily"] }, then: 5, else: { $cond: { if: { $eq: ["$frequency", "weekly"] }, then: 3, else: 0 } } }
+            },
+            latestDate: { $arrayElemAt: ["$latestLog.date", 0] },
+            isUpcoming: { $eq: ["$status", "upcoming"] }
+          }
+        },
+        {
+          $addFields: {
+            daysSince: {
+              $cond: {
+                if: { $ne: ["$latestDate", null] },
+                then: { $floor: { $divide: [ { $subtract: [new Date(), "$latestDate"] }, 1000 * 3600 * 24 ] } },
+                else: 0
+              }
+            }
+          }
+        },
+        {
+          $addFields: {
+            daysBonus: { $min: ["$daysSince", 14] },
+            newTopicBonus: { $cond: { if: "$isUpcoming", then: 5, else: 0 } }
+          }
+        },
+        {
+          $addFields: {
+            priorityScore: { $add: ["$baseScore", "$freqBonus", "$daysBonus", "$newTopicBonus"] },
+            reason: {
+              $cond: {
+                if: { $gte: ["$daysSince", 3] }, then: "Revision Due",
+                else: {
+                  $cond: {
+                    if: "$isUpcoming", then: "Start New Topic",
+                    else: {
+                      $cond: {
+                        if: { $eq: ["$frequency", "daily"] }, then: "Daily Focus",
+                        else: {
+                          $cond: {
+                            if: { $gte: ["$baseScore", 8] }, then: "High Importance",
+                            else: "Recommended"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        { $sort: { priorityScore: -1 } },
+        { $limit: 4 },
+        {
+          $project: {
+            id: "$_id",
+            title: 1,
+            duration: { $concat: [{ $toString: { $ifNull: ["$estimatedHours", 1] } }, "h"] },
+            subtitle: { $cond: { if: { $gt: [{ $size: { $ifNull: ["$problems", []] } }, 0] }, then: { $concat: [{ $toString: { $size: "$problems" } }, " Problems"] }, else: null } },
+            priorityScore: 1,
+            reason: 1
+          }
+        }
+      ]),
+
+      // 4. Heatmap & Timeline Pipeline
+      StudyLog.aggregate([
+        { $match: { user: userId, date: { $gte: new Date(new Date().setMonth(new Date().getMonth() - 6)) } } },
+        {
+          $lookup: {
+            from: "roadmaps",
+            localField: "topicId",
+            foreignField: "_id",
+            as: "topicDetails"
+          }
+        },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+            totalMinutes: { $sum: "$durationMinutes" },
+            topics: { $addToSet: { $arrayElemAt: ["$topicDetails.title", 0] } },
+            problems: { $push: "$problemsSolved" },
+            concepts: { $push: "$conceptsLearned" },
+            resources: { $push: "$resources" },
+            notes: { $push: "$notes" },
+            logs: { 
+              $push: {
+                id: "$_id",
+                title: "$title",
+                topicId: "$topicId",
+                details: { $concatArrays: [ { $ifNull: ["$problemsSolved", []] }, { $ifNull: ["$conceptsLearned", []] } ] }
+              }
+            }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ]),
+
+      // 5. Recent Activity
+      StudyLog.find({ user: userId }).sort({ date: -1 }).limit(10).select("_id title date")
+    ]);
+
+    // Format Hero Response
+    let hero = null;
+    let currentTopic = null;
+    let remainingTopics = [];
+
+    if (heroResult.length > 0) {
+      const activeNode = heroResult[0];
+      currentTopic = activeNode;
+      
+      const breadcrumb = activeNode.ancestors
+        .sort((a, b) => b.depth - a.depth) // Root to current
+        .map(a => a.title);
+
+      const totalItems = (activeNode.concepts?.length || 0) + (activeNode.problems?.length || 0) + activeNode.children.length;
+      let completedItems = activeNode.children.filter(c => c.status === "complete").length;
+      completedItems += (activeNode.concepts || []).filter(c => c.completed).length;
+      completedItems += (activeNode.problems || []).filter(p => p.completed).length;
+      const progress = totalItems === 0 ? 0 : Math.round((completedItems / totalItems) * 100);
+
+      hero = {
+        nodeId: activeNode._id,
+        title: activeNode.title,
+        breadcrumb,
+        progress,
+        estimatedRemaining: `${activeNode.estimatedHours || 1}h 00m`,
+        lastStudied: activeNode.latestLog.length > 0 ? activeNode.latestLog[0].date : null,
+      };
+
+      // Fetch remaining topics based on hero's parent
+      remainingTopics = await Roadmap.find({
+        user: userId,
+        parentId: activeNode.parentId || activeNode._id,
+        _id: { $ne: activeNode._id },
+        status: { $ne: "complete" }
+      }).limit(4).select("_id title estimatedHours");
     }
 
-    // 3. Hours This Week
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    
-    const weekLogs = await StudyLog.aggregate([
-      { $match: { user: userId, date: { $gte: oneWeekAgo } } },
-      { $group: { _id: null, totalMinutes: { $sum: "$durationMinutes" } } }
-    ]);
-    
-    const hoursThisWeek = weekLogs.length > 0 ? (weekLogs[0].totalMinutes / 60).toFixed(1) : "0.0";
-
-    // 4. Total Study Hours (All Time)
-    const allTimeLogs = await StudyLog.aggregate([
-      { $match: { user: userId } },
-      { $group: { _id: null, totalMinutes: { $sum: "$durationMinutes" } } }
-    ]);
-    
-    const totalHours = allTimeLogs.length > 0 ? (allTimeLogs[0].totalMinutes / 60).toFixed(1) : "0.0";
-
-    // 5. Heatmap Generation (Last 3 months approx)
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    
-    const heatmapLogs = await StudyLog.aggregate([
-      { $match: { user: userId, date: { $gte: threeMonthsAgo } } },
-      {
-        $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
-          totalMinutes: { $sum: "$durationMinutes" }
-        }
-      }
-    ]);
-
-    // Map heatmap dates to values (0-4 intensity)
-    const heatmapData = heatmapLogs.map(log => ({
-      date: log._id,
-      intensity: Math.min(4, Math.ceil(log.totalMinutes / 30)) // e.g. 1 unit = 30 mins, max 4
-    }));
-
-    // 6. Dynamic Focus Items & Mission Items
-    const allRoadmapNodes = await Roadmap.find({ user: userId });
-    
-    // Calculate progress for root nodes to use as "Current Focus"
-    const rootNodes = allRoadmapNodes.filter(n => !n.parentId);
-    const getDescendants = (nodeId) => {
-      let descendants = [];
-      const children = allRoadmapNodes.filter(n => n.parentId?.toString() === nodeId.toString());
-      descendants.push(...children);
-      for (let child of children) {
-        descendants.push(...getDescendants(child._id));
-      }
-      return descendants;
+    // Format Weekly Progress
+    const hoursStudied = weeklyLogsResult.length > 0 ? (weeklyLogsResult[0].totalMinutes / 60).toFixed(1) : "0.0";
+    const topicsCompleted = weeklyTopicsResult.length > 0 ? weeklyTopicsResult[0].count : 0;
+    const weeklyProgress = {
+      hoursStudied,
+      goalHours: 15,
+      topicsCompleted,
+      goalTopics: 8
     };
 
-    const accents = ["violet", "blue", "mint", "orange", "rose"];
-    const focusItems = rootNodes.map((root, index) => {
-      const descendants = getDescendants(root._id);
-      const total = descendants.length + 1;
-      const completed = (root.status === "complete" ? 1 : 0) + descendants.filter(d => d.status === "complete").length;
-      const progress = Math.round((completed / total) * 100);
-      return { 
-        label: root.title, 
-        progress, 
-        accent: accents[index % accents.length] 
+    // Format Heatmap & Timeline Response
+    const timeline = [];
+    const heatmap = heatmapResult.map(day => {
+      // Flatten arrays since we pushed arrays of arrays in grouping
+      const flatProblems = day.problems.flat().filter(Boolean);
+      const flatConcepts = day.concepts.flat().filter(Boolean);
+      const flatResources = day.resources.flat().filter(Boolean);
+      const flatNotes = day.notes.flat().filter(Boolean);
+
+      timeline.push({
+        date: day._id,
+        items: day.logs.map(log => ({
+          id: log.id,
+          title: log.title,
+          topicId: log.topicId,
+          details: log.details.flat().filter(Boolean).join(", ")
+        }))
+      });
+
+      return {
+        date: day._id,
+        totalMinutes: day.totalMinutes,
+        intensity: Math.min(4, Math.ceil(day.totalMinutes / 30)),
+        topics: day.topics.filter(Boolean),
+        problems: flatProblems,
+        concepts: flatConcepts,
+        resources: flatResources,
+        notes: flatNotes
       };
-    }).sort((a, b) => b.progress - a.progress).slice(0, 3); // Top 3
-
-    // Find "active" tasks for Today's Mission
-    const activeNodes = allRoadmapNodes.filter(n => n.status === "active").slice(0, 5);
-    const missionItems = activeNodes.map(n => ({
-      id: n._id,
-      label: n.title,
-      duration: `${n.estimatedHours || 1}h`,
-      completed: false
-    }));
-
-    // If no active nodes, let's grab some upcoming ones
-    if (missionItems.length === 0) {
-      const upcomingNodes = allRoadmapNodes.filter(n => n.status === "upcoming").slice(0, 3);
-      missionItems.push(...upcomingNodes.map(n => ({
-        id: n._id,
-        label: n.title,
-        duration: `${n.estimatedHours || 1}h`,
-        completed: false
-      })));
-    }
+    });
 
     res.json({
-      overview: {
-        userName: req.user.name,
-        greeting: "Welcome back",
-        subtitle: "Small progress today, big results tomorrow.",
-        overallProgress,
-        estimatedTime: "N/A", // Could be derived from roadmap
-      },
-      metrics: [
-        { id: "progress", label: "Overall Progress", value: `${overallProgress}%`, suffix: "", accent: "violet" },
-        { id: "streak", label: "Study Streak", value: streak.toString(), suffix: "days", accent: "orange" },
-        { id: "hours", label: "Hours This Week", value: hoursThisWeek.toString(), suffix: "hours", accent: "blue" },
-        { id: "projects", label: "Projects Completed", value: completedNodes.toString(), suffix: "projects", accent: "mint" },
-      ],
-      quickStats: [
-        { label: "Total Study Hours", value: totalHours.toString() },
-        { label: "Topics Completed", value: completedNodes.toString() },
-      ],
-      focusItems,
-      missionItems,
-      heatmap: heatmapData,
+      userName: req.user.name,
+      hero,
+      weeklyProgress,
+      todaysPlan: todaysPlanResult,
+      currentTopic,
+      remainingTopics: remainingTopics.map(n => ({ id: n._id, title: n.title, progress: 0, duration: `${n.estimatedHours || 1}h` })),
+      recentActivity: recentActivityResult.map(l => ({ id: l._id, title: l.title, date: l.date })),
+      timeline: timeline.reverse(), // Newest first for timeline view
+      heatmap
     });
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch dashboard stats", error: error.message });
+    res.status(500).json({ message: "Failed to fetch dashboard workspace", error: error.message });
   }
 };

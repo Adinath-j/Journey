@@ -2,13 +2,16 @@ import { create } from "zustand";
 import { api } from "@/services/api";
 
 export const useDashboardStore = create((set) => ({
-  overview: null,
-  metrics: [],
-  quickStats: [],
-  focusItems: [],
-  missionItems: [],
+  userName: "",
+  hero: null,
+  weeklyProgress: null,
+  todaysPlan: [],
+  currentTopic: null,
+  remainingTopics: [],
+  recentActivity: [],
+  timeline: [],
   heatmap: [],
-  isLoading: false,
+  isLoading: true,
   error: null,
 
   fetchDashboard: async () => {
@@ -16,12 +19,15 @@ export const useDashboardStore = create((set) => ({
     try {
       const data = await api.get("/dashboard");
       set({
-        overview: data.overview,
-        metrics: data.metrics,
-        quickStats: data.quickStats,
-        focusItems: data.focusItems || [],
-        missionItems: data.missionItems || [],
-        heatmap: data.heatmap,
+        userName: data.userName,
+        hero: data.hero,
+        weeklyProgress: data.weeklyProgress,
+        todaysPlan: data.todaysPlan || [],
+        currentTopic: data.currentTopic,
+        remainingTopics: data.remainingTopics || [],
+        recentActivity: data.recentActivity || [],
+        timeline: data.timeline || [],
+        heatmap: data.heatmap || [],
         isLoading: false,
       });
     } catch (error) {

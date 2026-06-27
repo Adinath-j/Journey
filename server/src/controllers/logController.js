@@ -18,7 +18,20 @@ export const getLogs = async (req, res) => {
 // @access  Private
 export const createLog = async (req, res) => {
   try {
-    const { title, durationMinutes, topicId, category, notes, completedTopic, date } = req.body;
+    const { 
+      title, 
+      durationMinutes, 
+      topicId, 
+      category, 
+      notes, 
+      completedTopic, 
+      date,
+      difficulty,
+      confidence,
+      problemsSolved,
+      conceptsLearned,
+      resources
+    } = req.body;
 
     const log = await StudyLog.create({
       user: req.user._id,
@@ -29,6 +42,11 @@ export const createLog = async (req, res) => {
       notes: notes || "",
       completedTopic: completedTopic || false,
       date: date ? new Date(date) : new Date(),
+      difficulty: difficulty || undefined,
+      confidence: confidence || undefined,
+      problemsSolved: problemsSolved || [],
+      conceptsLearned: conceptsLearned || [],
+      resources: resources || [],
     });
 
     // If a topicId was provided and the user marked it as completed, update the Roadmap status!

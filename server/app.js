@@ -12,7 +12,7 @@ const app = express();
 // Security and Middleware
 app.use(helmet());
 app.use(cors({
-  origin: "http://localhost:1420", // Tauri / Vite default
+  origin: ["http://localhost:1420", "http://localhost:1421", "http://localhost:5173"],
   credentials: true
 }));
 app.use(compression());

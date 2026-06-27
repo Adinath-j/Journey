@@ -36,6 +36,18 @@ const studyLogSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    problemsSolved: [{ type: String }],
+    conceptsLearned: [{ type: String }],
+    difficulty: {
+      type: String,
+      enum: ["Easy", "Medium", "Hard"],
+    },
+    confidence: {
+      type: Number,
+      min: 1,
+      max: 5,
+    },
+    resources: [{ type: String }],
   },
   { timestamps: true }
 );

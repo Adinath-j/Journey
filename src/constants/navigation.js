@@ -3,4 +3,6 @@ export const navigationItems = [
   { id: "heatmap", label: "Heatmap" },
   { id: "roadmap", label: "Roadmap" },
   { id: "log", label: "Log" },
+  { id: "analytics", label: "Analytics" },
+  { id: "library", label: "Library" },
 ];

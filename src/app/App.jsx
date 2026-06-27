@@ -4,12 +4,18 @@ import { AppShell } from "@/components/layout/AppShell";
 import { useAppStore } from "@/store/useAppStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { AuthOverlay } from "@/components/auth/AuthOverlay";
+import { CommandPalette } from "@/components/ui/CommandPalette";
+
+import StudyWorkspace from "@/pages/StudyWorkspace/StudyWorkspace";
+import { ResumeSessionPrompt } from "@/components/workspace/ResumeSessionPrompt";
 
 const pages = {
   dashboard: lazy(() => import("@/pages/Dashboard/Dashboard")),
   heatmap: lazy(() => import("@/pages/Heatmap/Heatmap")),
   roadmap: lazy(() => import("@/pages/Roadmap/Roadmap")),
   log: lazy(() => import("@/pages/Log/Log")),
+  analytics: lazy(() => import("@/pages/Analytics/Analytics")),
+  library: lazy(() => import("@/pages/Library/Library")),
 };
 
 export function App() {
@@ -35,6 +41,9 @@ export function App() {
           </AnimatePresence>
         </Suspense>
       </AppShell>
+      <StudyWorkspace />
+      <ResumeSessionPrompt />
+      <CommandPalette />
     </>
   );
 }
